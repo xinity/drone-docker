@@ -7,6 +7,7 @@ The following parameters are used to configure this plugin:
 * `email` - authenticates with this email
 * `repo` - repository name for the image
 * `tag` - repository tag for the image
+* `cert` - ca certificate if registry uses self-signed certs
 * `insecure` - enable insecure communication to this registry
 * `storage_driver` - use `aufs`, `devicemapper`, `btrfs` or `overlay` driver
 * `archive` - save and restore image layers to/from a tarred archive

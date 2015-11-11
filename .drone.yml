@@ -19,6 +19,15 @@ publish:
     when:
       branch: master
 
+  docker:
+    username: drone
+    password: $$DOCKER_PASS
+    email: $$DOCKER_EMAIL
+    repo: plugins/drone-docker
+    tag: develop
+    when:
+      branch: !master
+
 plugin:
   name: Docker
   desc: Build and Publish images to a Docker registry.

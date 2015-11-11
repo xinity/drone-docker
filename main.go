@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,8 +14,8 @@ import (
 )
 
 type Archive struct {
-	File     string   `json:"file"`
-	Tag      StrSlice `json:"tag"`
+	File string   `json:"file"`
+	Tag  StrSlice `json:"tag"`
 }
 
 type Docker struct {
@@ -28,6 +29,7 @@ type Docker struct {
 	Repo     string   `json:"repo"`
 	Tag      StrSlice `json:"tag"`
 	File     string   `json:"file"`
+	Cert     string   `json:"cert"`
 	Context  string   `json:"context"`
 	Dns      []string `json:"dns"`
 	Archive  Archive  `json:"archive"`
@@ -68,8 +70,24 @@ func main() {
 	}
 	// Archive file can be both a relative or absolute path
 	if len(vargs.Archive.File) != 0 {
-		if ! filepath.IsAbs(vargs.Archive.File) {
+		if !filepath.IsAbs(vargs.Archive.File) {
 			vargs.Archive.File = filepath.Join(workspace.Path, vargs.Archive.File)
+		}
+	}
+
+	// install the cert if provided
+	if len(vargs.Cert) != 0 {
+		uri, err := url.Parse(vargs.Registry)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(0)
+		}
+		os.MkdirAll(filepath.Join("/etc/docker/certs.d/", uri.Host), 0711)
+		err = ioutil.WriteFile(filepath.Join("/etc/docker/certs.d/", uri.Host, "ca.crt"),
+			[]byte(vargs.Cert), 0644)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(0)
 		}
 	}
 
