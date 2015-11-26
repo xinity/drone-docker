@@ -9,10 +9,12 @@ The following parameters are used to configure this plugin:
 * `tag` - repository tag for the image
 * `cert` - ca certificate if registry uses self-signed certs
 * `insecure` - enable insecure communication to this registry
+* `mirror` - use a mirror registry instead of pulling images directly from the central Hub
 * `storage_driver` - use `aufs`, `devicemapper`, `btrfs` or `overlay` driver
-* `archive` - save and restore image layers to/from a tarred archive
-    * `file` - absolute or relative path to archive file
-    * `tag` - limit archiving to these tag(s) (optional)
+* `save` - save image layers to the specified tar file (see [docker save](https://docs.docker.com/engine/reference/commandline/save/))
+    * `file` - absolute / relative destination path
+    * `tags` - cherry-pick tags to save (optional)
+* `load` - restore image layers from the specified tar file
 
 The following is a sample Docker configuration in your .drone.yml file:
 
@@ -56,8 +58,10 @@ publish:
 ```
 
 Note that in the above example we quote the version numbers. If the yaml parser interprets the value as a number it will cause a parsing error.
+ 
+## Layer Caching
 
-You may want to cache Docker image layers between builds to speed up the build process:
+The Drone build environment is, by default, ephemeral meaning that you layers are not saved between builds. The below example combines Drone's caching feature and Docker's `save` and `load` capabilities to cache and restore image layers between builds:
 
 ```
 publish:
@@ -69,14 +73,17 @@ publish:
     tag:
       - latest
       - "1.0.1"
-    archive:
+    load: docker/image.tar
+    save:
       file: docker/image.tar
-      tag: latest
+      tags: latest
 
 cache:
   mount:
     - docker/image.tar
 ```
+
+In some cases caching will greatly improve build performance, however, the tradeoff is that caching Docker image layers may consume very large amounts of disk space.
 
 ## Troubleshooting
 
@@ -103,15 +110,15 @@ This error occurs when trying to use the `overlay` storage Driver but overlay is
 
 ```
 level=error msg="'overlay' not found as a supported filesystem on this host.
-Please ensure kernel is new enough and has overlay support loaded." 
+Please ensure kernel is new enough and has overlay support loaded."
 level=fatal msg="Error starting daemon: error initializing graphdriver: driver not supported"
 ```
 
 This error occurs when using CentOS or RedHat which default to the `devicemapper` storage driver:
 
 ```
-level=error msg="There are no more loopback devices available." 
-level=fatal msg="Error starting daemon: error initializing graphdriver: loopback mounting failed" 
+level=error msg="There are no more loopback devices available."
+level=fatal msg="Error starting daemon: error initializing graphdriver: loopback mounting failed"
 Cannot connect to the Docker daemon. Is 'docker -d' running on this host?
 ```
 

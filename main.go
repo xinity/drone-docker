@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,14 +12,17 @@ import (
 	"github.com/drone/drone-plugin-go/plugin"
 )
 
-type Archive struct {
-	File string   `json:"file"`
-	Tag  StrSlice `json:"tag"`
+type Save struct {
+	// Absolute or relative path
+	File string `json:"destination"`
+	// Only save specified tags (optional)
+	Tags StrSlice `json:"tag"`
 }
 
 type Docker struct {
 	Storage  string   `json:"storage_driver"`
 	Registry string   `json:"registry"`
+	Mirror   string   `json:"mirror"`
 	Insecure bool     `json:"insecure"`
 	Username string   `json:"username"`
 	Password string   `json:"password"`
@@ -29,10 +31,10 @@ type Docker struct {
 	Repo     string   `json:"repo"`
 	Tag      StrSlice `json:"tag"`
 	File     string   `json:"file"`
-	Cert     string   `json:"cert"`
 	Context  string   `json:"context"`
 	Dns      []string `json:"dns"`
-	Archive  Archive  `json:"archive"`
+	Load     string   `json:"load"`
+	Save     Save     `json:"save"`
 }
 
 func main() {
@@ -68,26 +70,16 @@ func main() {
 	if vargs.Tag.Len() == 0 {
 		vargs.Tag = StrSlice{[]string{"latest"}}
 	}
-	// Archive file can be both a relative or absolute path
-	if len(vargs.Archive.File) != 0 {
-		if !filepath.IsAbs(vargs.Archive.File) {
-			vargs.Archive.File = filepath.Join(workspace.Path, vargs.Archive.File)
+	// Get absolute path for 'save' file
+	if len(vargs.Save.File) != 0 {
+		if !filepath.IsAbs(vargs.Save.File) {
+			vargs.Save.File = filepath.Join(workspace.Path, vargs.Save.File)
 		}
 	}
-
-	// install the cert if provided
-	if len(vargs.Cert) != 0 {
-		uri, err := url.Parse(vargs.Registry)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(0)
-		}
-		os.MkdirAll(filepath.Join("/etc/docker/certs.d/", uri.Host), 0711)
-		err = ioutil.WriteFile(filepath.Join("/etc/docker/certs.d/", uri.Host, "ca.crt"),
-			[]byte(vargs.Cert), 0644)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(0)
+	// Get absolute path for 'load' file
+	if len(vargs.Load) != 0 {
+		if !filepath.IsAbs(vargs.Load) {
+			vargs.Load = filepath.Join(workspace.Path, vargs.Load)
 		}
 	}
 
@@ -99,6 +91,9 @@ func main() {
 		}
 		if vargs.Insecure && len(vargs.Registry) != 0 {
 			args = append(args, "--insecure-registry", vargs.Registry)
+		}
+		if len(vargs.Mirror) != 0 {
+			args = append(args, "--registry-mirror", vargs.Mirror)
 		}
 
 		for _, value := range vargs.Dns {
@@ -156,12 +151,12 @@ func main() {
 	trace(cmd)
 	cmd.Run()
 
-	// Load archived image if exists
-	if len(vargs.Archive.File) != 0 {
-		if _, err := os.Stat(vargs.Archive.File); err != nil {
-			fmt.Printf("Archive %s does not exist. Building from scratch.\n", vargs.Archive.File)
+	// Restore from tarred image repository
+	if len(vargs.Load) != 0 {
+		if _, err := os.Stat(vargs.Load); err != nil {
+			fmt.Printf("Archive %s does not exist. Building from scratch.\n", vargs.Load)
 		} else {
-			cmd := exec.Command("/usr/bin/docker", "load", "-i", vargs.Archive.File)
+			cmd := exec.Command("/usr/bin/docker", "load", "-i", vargs.Load)
 			cmd.Dir = workspace.Path
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
@@ -213,17 +208,17 @@ func main() {
 		}
 	}
 
-	// Save the image to the archive
-	if len(vargs.Archive.File) != 0 {
-		// if the path's directory does not exist, create it
-		dir := filepath.Dir(vargs.Archive.File)
+	// Save to tarred image repository
+	if len(vargs.Save.File) != 0 {
+		// if the destination directory does not exist, create it
+		dir := filepath.Dir(vargs.Save.File)
 		os.MkdirAll(dir, 0755)
 
-		cmd = exec.Command("/usr/bin/docker", "save", "-o", vargs.Archive.File)
+		cmd = exec.Command("/usr/bin/docker", "save", "-o", vargs.Save.File)
 
-		// Limit save command to the given tag(s)
-		if vargs.Archive.Tag.Len() != 0 {
-			for _, tag := range vargs.Archive.Tag.Slice() {
+		// Limit saving to the given tags
+		if vargs.Save.Tags.Len() != 0 {
+			for _, tag := range vargs.Save.Tags.Slice() {
 				name_ := fmt.Sprintf("%s:%s", vargs.Repo, tag)
 				cmd.Args = append(cmd.Args, name_)
 			}
